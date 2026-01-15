@@ -113,21 +113,36 @@ Expected layout (quality-level folders):
 jpeg_removal
 ├── train_paired
 │   ├── train_10
+│   │   ├── 0001.jpg
+│   │   ├── 0002.jpg
+│   │   └── ...
 │   ├── train_20
+│   │   ├── 0001.jpg
+│   │   └── ...
 │   ├── train_30
+│   │   └── ...
 │   ├── ...
 │   └── train_100
+│       └── ...
 └── train
     ├── 0001.png
     └── ...
 ```
 
-Validation uses a similar structure:
+Notes:
+- Each `train_<quality>` folder contains JPEG images (`.jpg`/`.jpeg`). GT images under `train/` are PNGs (`.png`). The loader reads all files in each folder, so keep only images there.
+- Filenames (basenames) must match across qualities and GT (e.g., `train_paired/train_10/0001.jpg` ↔ `train/0001.png`) so that sorted ordering pairs the correct inputs/targets.
+
+Validation uses a similar structure (single fixed quality):
 
 ```
 valid_paired
 ├── valid_10
+│   ├── 0001.jpg
+│   └── ...
 └── valid
+    ├── 0001.png
+    └── ...
 ```
 
 > **Note:** Training randomly samples from JPEG qualities `[10, 20, ..., 100]` each iteration.

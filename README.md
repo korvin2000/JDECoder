@@ -11,6 +11,7 @@ JDEC is a neural JPEG decoder that consumes **JPEG DCT coefficients + quantizati
 ## Contents
 
 - [Key Ideas](#key-ideas)
+- [Architecture Overview (models/)](#architecture-overview-models)
 - [Repository Structure](#repository-structure)
 - [Environment & Dependencies](#environment--dependencies)
 - [Installation](#installation)
@@ -37,6 +38,36 @@ JDEC is a neural JPEG decoder that consumes **JPEG DCT coefficients + quantizati
 - **Two-stage decoding**:
   1. **Encoder** (SwinV2-based) embeds grouped DCT spectra.
   2. **Decoder** (MLP/1x1 conv) maps basis features to RGB.
+
+---
+
+## Architecture Overview (models/)
+
+**Visual workflow (default training path)**:
+
+```
+JPEG DCT coeffs (Y, CbCr) + quant tables
+        │
+        ▼
+SwinV2 DCT encoder (swinv2_group_embedded)
+        │
+        ▼
+JDEC frequency/basis mixing + de-quantization
+        │
+        ▼
+MLP 1x1-conv decoder (mlp_1dconv) → RGB reconstruction
+```
+
+### Architecture table (models/)
+
+| File | Registry name(s) | What it is | Where/how it is used | Default? | Dependencies & interoperability |
+| --- | --- | --- | --- | --- | --- |
+| `models/JDEC.py` | `IPEC-decoder_dctform-rgb-share-size4` (core JDEC model) | Full JPEG-domain decoder. It consumes DCT coeffs + chroma + quant maps, builds cosine basis features, and produces RGB via a learned decoder. | Constructed via `models.make` inside training/eval when `model.name` points at the JDEC architecture. It calls a **DCT encoder** (`encoder_spec`) and a **decoder** (`decoder_spec`) to form the end-to-end JDEC pipeline. | **Yes** (training config uses JDEC with SwinV2 encoder + MLP decoder). | Depends on an encoder (typically SwinV2) and a decoder (MLP/1x1 conv). The decoder is interchangeable as long as it matches `in_dim`/`out_dim`. Encoder/decoder selections are independent configuration knobs. |
+| `models/swinirv2.py` | `swinv2_group_embedded` | Swin Transformer V2 encoder adapted for DCT-domain inputs. It embeds grouped Y/CbCr blocks and outputs token features for JDEC. | Used as the **default encoder** in `configs/train_JDEC.yaml` and in `test.py`. The JDEC model instantiates it through `encoder_spec`. | **Yes** (default encoder). | Uses DCT patch/subblock utilities from `plainvit.py` to combine/decompose 8×8 blocks. Interchangeable with any encoder that matches JDEC’s expected feature layout (`encoder_spec`/`out_dim`). |
+| `models/mlp.py` | `mlp`, `mlp_1dconv` | Lightweight decoders. `mlp` is a linear MLP on flattened tokens; `mlp_1dconv` is a 1×1 Conv MLP on feature maps. | Used as the **decoder head** via `decoder_spec` inside JDEC. `mlp_1dconv` is the default in `configs/train_JDEC.yaml`. | **Yes** (`mlp_1dconv` default). | `mlp` and `mlp_1dconv` are interchangeable if the input tensor layout matches (flattened tokens vs. feature maps). Both map feature channels to RGB (`out_dim=3`). |
+| `models/plainvit.py` | (no registry entry) | Patch embedding + positional encoding utilities and DCT subblock conversion helpers for ViT-like models. | Not directly instantiated via `models.make`, but its subblock utilities are imported and reused in `swinirv2.py`. It also supports building plain ViT variants for RGB/DCT if used elsewhere. | **No** (utility + optional alternative). | Provides shared DCT block conversion logic (combine/decompose) used by SwinV2’s DCT patching. Functionality is analogous to DCT embedding in SwinV2; can be used to swap in a plain ViT encoder if wired into `models.make`. |
+| `models/models.py` | (registry + factory) | Registry + `make()` factory for constructing models by name/spec. Handles saved state loading. | Used by `train.py` and `test.py` to instantiate the JDEC model and its submodules from YAML or checkpoint specs. | **Yes** (core construction path). | Defines the extension point for adding new architectures. JDEC depends on it to build encoder/decoder by registry name. |
+| `models/__init__.py` | (module exports) | Registers model submodules so `models.make` sees all model classes. | Imported at startup so that `@register` decorators execute and populate the registry. | **Yes** (implicit). | Ensures all registered architectures are visible to the factory; without it, configs referencing registry names would fail. |
 
 ---
 

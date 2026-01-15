@@ -1,109 +1,367 @@
 # JDEC: JPEG Decoding via Enhanced Continuous Cosine Coefficient
-This repository contains the official implementation for JDEC introduced in the following paper:
 
-[JDEC: JPEG Decoding via Enhanced Continuous Cosine Coefficient (CVPR 2024)](https://openaccess.thecvf.com/content/CVPR2024/papers/Han_JDEC_JPEG_Decoding_via_Enhanced_Continuous_Cosine_Coefficients_CVPR_2024_paper.pdf)
+Official implementation of **JDEC** from CVPR 2024: [JDEC: JPEG Decoding via Enhanced Continuous Cosine Coefficients](https://openaccess.thecvf.com/content/CVPR2024/papers/Han_JDEC_JPEG_Decoding_via_Enhanced_Continuous_Cosine_Coefficients_CVPR_2024_paper.pdf) ([arXiv](https://arxiv.org/abs/2404.05558), [Project Page](https://wookyounghan.github.io/JDEC/)).
 
-
-[arXiv](https://arxiv.org/abs/2404.05558)
-
-
-[Project Page](https://wookyounghan.github.io/JDEC/)
-
-
-## Overall Structure
+JDEC is a neural JPEG decoder that consumes **JPEG DCT coefficients + quantization tables**, not pixel-space images. It builds a continuous cosine representation and reconstructs RGB images with high PSNR and reduced artifacts.
 
 ![Overall Structure of Our JDEC](./static/images/Fig_4_ver_final_main.jpg)
 
-JDEC consists of an encoder with group spectra embedding, a decoder, and a continuous cosine formulation. Inputs of JDEC are as follows: compressed spectra and quantization map. Note that our JDEC does not take images as input. JDEC formulates latent features into a trainable continuous cosine coefficient as a function of the block grid and forwards to INR. Therefore, each block shares the estimated continuous cosine spectrum.
+---
 
+## Contents
 
+- [Key Ideas](#key-ideas)
+- [Repository Structure](#repository-structure)
+- [Environment & Dependencies](#environment--dependencies)
+- [Installation](#installation)
+- [Data Preparation](#data-preparation)
+- [Training Workflow](#training-workflow)
+- [Testing / Evaluation Workflow](#testing--evaluation-workflow)
+- [Configuration Reference](#configuration-reference)
+- [Model & Dataset Registration](#model--dataset-registration)
+- [Customization Guide](#customization-guide)
+- [FAQ / Troubleshooting](#faq--troubleshooting)
+- [Acknowledgements](#acknowledgements)
+- [BibTeX](#bibtex)
+
+---
+
+## Key Ideas
+
+- **Inputs are JPEG-domain**: JDEC uses compressed **DCT coefficients** and **quantization maps**, not RGB pixels.
+- **Continuous cosine basis**: Features are mapped to a learnable cosine basis over block grids, enabling continuous-frequency reconstruction.
+- **Two-stage decoding**:
+  1. **Encoder** (SwinV2-based) embeds grouped DCT spectra.
+  2. **Decoder** (MLP/1x1 conv) maps basis features to RGB.
+
+---
+
+## Repository Structure
+
+```
+.
+├── configs/                  # YAML training configs
+├── datasets/                 # Dataset definitions + wrappers
+├── dct_manip/                # Custom libjpeg handler (needs compilation)
+├── models/                   # JDEC model + encoder/decoder registries
+├── utils/                    # DCT ops, transforms, helpers
+├── train.py                  # Training entrypoint
+├── test.py                   # Evaluation entrypoint
+├── requirements.txt          # Pinned pip dependencies
+└── environment.yaml          # Conda environment (recommended)
+```
+
+Key modules:
+- **datasets/**: `image_folder_paired.py` and `wrappers_jpeg.py` define JPEG-coefficient datasets and input/GT wrappers.
+- **models/**: `JDEC.py` (core model), `swinirv2.py` (encoder), `mlp.py` (decoder).
+- **utils_.py**: training utilities, metrics (PSNR/PSNRB/SSIM), logging.
+
+---
+
+## Environment & Dependencies
+
+This project was developed on **Ubuntu 20.04** with **Python 3.6**, **PyTorch 1.10**, and **CUDA 11.3**. See:
+- `environment.yaml` for the full conda environment.
+- `requirements.txt` for a minimal pip list.
+
+Major dependencies:
+- PyTorch, torchvision
+- timm, einops
+- opencv-python, Pillow
+- jpegio, dct-manip (JPEG coefficient I/O)
+- tensorboardX, tqdm
+
+---
 
 ## Installation
 
-Our code is based on Ubuntu 20.04, PyTorch 1.10.0, CUDA 11.3 (NVIDIA RTX 3090 24GB, sm86), and python 3.6.
+### 1) Create environment
 
-For environment setup, we recommend using [conda](https://www.anaconda.com/distribution/) for installation:
-
-```
+```bash
 conda env create --file environment.yaml
 conda activate jdec
 ```
 
+### 2) Build `dct_manip`
 
-The encoder module of our JDEC is based on the prior work [RGB No More](https://github.com/JeongsooP/RGB-no-more).
+`dct_manip` is a modified libjpeg handler required for DCT coefficient I/O:
 
-Please refer to the Usage part for installation.
+1. Open `dct_manip/setup.py` and update:
+   - `include_dirs` and `library_dirs`
+   - `extra_objects` (path to `libjpeg.so`)
+   - `headers` (path to `jpeglib.h`)
+2. Build and install:
 
-- Compile `dct_manip` -- a modified `libjpeg` handler:
-
-  - Open `dct_manip/setup.py`
-  - Modify `include_dirs` and `library_dirs` to include your include and library folder.
-  - Modify `extra_objects` to the path containing `libjpeg.so`
-  - Modify `headers` to the path containing `jpeglib.h`
-
-  - Run `cd dct_manip`
-  - Run `pip install .`
-
-
-
-### Data Preparation
-Our train and valid sets follow the prior work [FBCNN](https://github.com/jiaxi-jiang/FBCNN), from [DIV2K](https://data.vision.ee.ethz.ch/cvl/DIV2K/) and [Flickr2K](https://www.kaggle.com/datasets/daehoyang/flickr2k) dataset. 
-- The following file configurations are required to operate the data loader:
-  ```
-  jpeg_removal
-  ├── train_paired
-  │   ├── train_10
-  │   │   ├── 0001.jpeg
-  │   │   ├──...
-  │   ├── train_20
-  │   │   ├── 0001.jpeg
-  │   │   ├──...
-  │   ├── train_30
-  │   │   ├── 0001.jpeg
-  │   ├── ...
-  │   └── train #(GT)
-  │       ├── 0001.png
-  │       └──...
-  └── valid_paired
-      ├── valid_10
-      │   ├── 0801.jpeg
-      │   ├──...
-      └── valid
-          ├── 0001.png
-          └──..
-  ```
-
- 
-
-## Train
-The basic train code is : 
+```bash
+cd dct_manip
+pip install .
 ```
+
+---
+
+## Data Preparation
+
+The training/validation layout follows [FBCNN](https://github.com/jiaxi-jiang/FBCNN) with **paired JPEGs** at multiple qualities and **PNG ground-truth**.
+
+Expected layout (quality-level folders):
+
+```
+jpeg_removal
+├── train_paired
+│   ├── train_10
+│   ├── train_20
+│   ├── train_30
+│   ├── ...
+│   └── train_100
+└── train
+    ├── 0001.png
+    └── ...
+```
+
+Validation uses a similar structure:
+
+```
+valid_paired
+├── valid_10
+└── valid
+```
+
+> **Note:** Training randomly samples from JPEG qualities `[10, 20, ..., 100]` each iteration.
+
+---
+
+## Training Workflow
+
+### Basic command
+
+```bash
 python train.py --config configs/train_JDEC.yaml --gpu 0
 ```
 
-If you want to modify some configuration (e.g. the range of input bit-depth) modify `.yaml` files and run 
-```
-python train.py --config configs/FancyConfiguration.yaml --gpu 0
+### What happens in training
+
+1. **Dataset setup**
+   - `train-paired-imageset` reads JPEGs at multiple qualities + GT PNGs.
+   - `JDEC-decoder_toimage_rgb` wrapper:
+     - Loads DCT coeffs + quant tables via `dct_manip.read_coefficients`.
+     - Crops aligned JPEG blocks and GT patches.
+     - Normalizes DCT values to `[-1, 1]`.
+
+2. **Model forward pass**
+   - Encoder: `swinv2_group_embedded` (SwinV2-based)
+   - Decoder: `mlp_1dconv` (1x1 conv MLP)
+   - Loss: L1 between predicted RGB and GT RGB.
+
+3. **Outputs**
+   - Checkpoints saved in `./save/<config_name>/`:
+     - `epoch-last.pth` every epoch
+     - `epoch-<N>.pth` for `epoch_save`
+     - `epoch-best.pth` based on validation PSNR
+   - Tensorboard logs in `./save/<config_name>/tensorboard/`
+
+### Resume training
+
+Set `resume` in YAML to the checkpoint:
+
+```yaml
+resume: ./save/_train_JDEC/epoch-last.pth
 ```
 
-We provide our main model's [checkpoint](https://drive.google.com/file/d/1_TLoGHLBtdbPdApRmI0y0YW2nEqnO8Dr/view?usp=sharing).
+---
 
-## Test
-The basic test code is : 
+## Testing / Evaluation Workflow
+
+`test.py` evaluates PSNR/PSNRB/SSIM on benchmark datasets (LIVE1, BSDS500, ICB).
+
+### Basic command
+
+```bash
+python test.py
 ```
-python test.py 
+
+### Required edits in `test.py`
+
+- Set dataset and paths:
+  ```python
+  setname = 'LIVE1'
+  data_path = './PATH_TO_LIVE1'
+  model_path = './PATH_TO_MODEL'
+  ```
+- By default the script evaluates at JPEG quality `q=30`.
+
+### Outputs
+
+- Prints averaged PSNR / PSNRB / SSIM.
+- Saves decoded images under `./bin/<DATASET>/<QUALITY>/` when `save=True`.
+
+---
+
+## Configuration Reference
+
+The training config (`configs/train_JDEC.yaml`) drives the full pipeline.
+
+### Top-level fields
+
+| Field | Purpose |
+|-------|---------|
+| `train_dataset` | Training dataset + wrapper + batch size |
+| `val_dataset` | Validation dataset + wrapper + batch size |
+| `model` | Model architecture spec + encoder/decoder |
+| `optimizer` | Optimizer name + hyperparameters |
+| `epoch_max` | Total training epochs |
+| `multi_step_lr` | LR scheduler settings |
+| `epoch_val` | Validation frequency (epochs) |
+| `epoch_save` | Checkpoint frequency (epochs) |
+| `resume` | Path to checkpoint to resume from |
+
+### Dataset spec
+
+```yaml
+train_dataset:
+  dataset:
+    name: train-paired-imageset
+    args:
+      root_path_inp: ./load/jpeg_removal/train_paired/train
+      root_path_gt: ./load/jpeg_removal/train
+      repeat: 5
+      cache: bin
+  wrapper:
+    name: JDEC-decoder_toimage_rgb
+    args:
+      inp_size: 14
+  batch_size: 16
 ```
-The path to the model checkpoint and benchmark datasets should be changed.
 
-(e.g.`'./PATH_TO_LIVE1'` and `model_path = './PATH_TO_MODEL'`)
+**Key options**
+- `repeat`: repeats the dataset (effective epoch length).
+- `cache`: `none | bin | in_memory` (binary cache is recommended).
+- `inp_size`: crop size in blocks (controls patch size).
 
+### Model spec
+
+```yaml
+model:
+  name: jdec
+  args:
+    encoder_spec:
+      name: swinv2_group_embedded
+      args:
+        use_subblock: True
+        emb_size: 256
+        num_heads: [8,8,8,8,8]
+    decoder_spec:
+      name: mlp_1dconv
+      args:
+        out_dim: 3
+        hidden_list: [512, 512, 512]
+    hidden_dim: 512
+```
+
+**Important:** The model registry is keyed by `@register(...)` names. See [Model & Dataset Registration](#model--dataset-registration).
+
+---
+
+## Model & Dataset Registration
+
+The repo uses lightweight registries for extensibility:
+
+### Models
+- Registry: `models/models.py` → `models` dict
+- Registration: `@register('<name>')`
+- Factory: `models.make(spec)`
+
+Registered model names in code:
+- `IPEC-decoder_dctform-rgb-share-size4` → JDEC core model
+- `swinv2_group_embedded` → SwinV2 encoder
+- `mlp` / `mlp_1dconv` → decoders
+
+### Datasets & Wrappers
+- Registry: `datasets/datasets.py`
+- Registration: `@register('<name>')`
+- Factory: `datasets.make(spec)`
+
+Registered dataset/wrapper names in code:
+- `train-paired-imageset`, `valid-paired-dataset`
+- `image-folder-png`, `image-folder-embed-image`
+- `JDEC-decoder_toimage_rgb`
+
+---
+
+## Customization Guide
+
+### 1) Add a new dataset
+
+```python
+# datasets/my_dataset.py
+from datasets import register
+from torch.utils.data import Dataset
+
+@register('my-dataset')
+class MyDataset(Dataset):
+    ...
+```
+
+Then update YAML:
+```yaml
+dataset:
+  name: my-dataset
+  args: { ... }
+```
+
+### 2) Add a new model
+
+```python
+# models/my_model.py
+from models import register
+import torch.nn as nn
+
+@register('my-model')
+class MyModel(nn.Module):
+    ...
+```
+
+Then update YAML:
+```yaml
+model:
+  name: my-model
+  args: { ... }
+```
+
+### 3) Swap encoder / decoder
+
+JDEC is defined as:
+- `encoder_spec`: DCT encoder (SwinV2-based)
+- `decoder_spec`: pixel-space decoder (MLP/Conv)
+
+You can replace either spec with a registered model as long as input/output shapes are compatible.
+
+---
+
+## FAQ / Troubleshooting
+
+**Q: “Model name `jdec` not found in registry.”**
+- The registry keys are derived from `@register(...)` names. The core JDEC model is registered as `IPEC-decoder_dctform-rgb-share-size4`. If you see a missing key error, update the YAML `model.name` to match that key, or add a `@register('jdec')` alias in code.
+
+**Q: “`dct_manip` build fails.”**
+- Ensure libjpeg headers and shared objects are correctly referenced in `dct_manip/setup.py`. You must provide valid `include_dirs`, `library_dirs`, and `extra_objects` paths.
+
+**Q: “CUDA out of memory.”**
+- Reduce `batch_size`, `inp_size`, or encoder embedding sizes.
+
+**Q: “Validation PSNR is NaN/inf.”**
+- Verify input normalization in the wrapper and check for invalid coefficients (e.g., corrupted JPEGs).
+
+---
 
 ## Acknowledgements
 
-This code is built on [LIIF](https://github.com/yinboc/liif),[LTE](https://github.com/jaewon-lee-b/lte), [SwinIR](https://github.com/JingyunLiang/SwinIR) and [RGB No More](https://github.com/JeongsooP/RGB-no-more). We thank the authors for sharing their codes.
-```plain
+This code is built on [LIIF](https://github.com/yinboc/liif), [LTE](https://github.com/jaewon-lee-b/lte), [SwinIR](https://github.com/JingyunLiang/SwinIR), and [RGB No More](https://github.com/JeongsooP/RGB-no-more). We thank the authors for sharing their codes.
 
-BibTex:
+---
+
+## BibTeX
+
+```bibtex
 @inproceedings{han2024jdec,
   title={JDEC: JPEG Decoding via Enhanced Continuous Cosine Coefficients},
   author={Han, Woo Kyoung and Im, Sunghoon and Kim, Jaedeok and Jin, Kyong Hwan},
@@ -112,4 +370,3 @@ BibTex:
   year={2024}
 }
 ```
-

@@ -17,10 +17,14 @@ JDEC is a neural JPEG decoder that consumes **JPEG DCT coefficients + quantizati
 - [Data Preparation](#data-preparation)
 - [Training Workflow](#training-workflow)
 - [Testing / Evaluation Workflow](#testing--evaluation-workflow)
+- [Project Workflow Deep Dive](#project-workflow-deep-dive)
 - [Configuration Reference](#configuration-reference)
 - [Model & Dataset Registration](#model--dataset-registration)
 - [Customization Guide](#customization-guide)
+- [How-to Recipes](#how-to-recipes)
 - [FAQ / Troubleshooting](#faq--troubleshooting)
+- [Known Limitations & Inconsistencies](#known-limitations--inconsistencies)
+- [Potential Next Steps](#potential-next-steps)
 - [Acknowledgements](#acknowledgements)
 - [BibTeX](#bibtex)
 
@@ -196,6 +200,81 @@ python test.py
 
 ---
 
+## Project Workflow Deep Dive
+
+This section follows the actual code paths to document invariants, data flow, and failure modes.
+
+### End-to-end data flow map
+
+1. **JPEG I/O (DCT domain)**  
+   `dct_manip.read_coefficients` loads each JPEG and returns:
+   - Quantization tables (`q_y`, `q_cbcr`)
+   - Luma (Y) and chroma (CbCr) DCT coefficient blocks
+2. **Data wrapping**  
+   `JDEC-decoder_toimage_rgb`:
+   - Randomly crops a block-aligned patch in **DCT space** and the corresponding **RGB GT**.
+   - Dequantizes DCT by multiplying coefficients with the quantization tables.
+   - Clamps coefficients to `[-1024, 1016]`, then normalizes to `[-1, 1]`.
+   - Converts GT from BGR to RGB and shifts to `[-0.5, 0.5]`.
+3. **Model forward**  
+   `model(dct_y, dct_cbcr, q_map)` predicts RGB in the **same shifted range**.
+4. **Loss / metrics**  
+   - Training: `L1(pred_rgb, gt_rgb)`  
+   - Validation: PSNR on the normalized/shifted tensors.
+
+### Training chain (step-by-step)
+
+1. **Config loading**: `train.py` reads YAML and sets `CUDA_VISIBLE_DEVICES`.
+2. **Dataset + wrapper**:
+   - `train-paired-imageset` selects a random JPEG quality for each sample.
+   - `JDEC-decoder_toimage_rgb` performs block-aligned cropping and normalization.
+3. **DataLoader**:
+   - `shuffle=True` for train, `num_workers=8`, `pin_memory=True`.
+4. **Forward pass**:
+   - Inputs: `inp` (Y DCT), `chroma` (CbCr DCT), `dqt` (quant tables).
+   - Output: predicted RGB patch in shifted range.
+5. **Optimization**:
+   - L1 loss; optimizer from `config.optimizer`.
+   - Optional `MultiStepLR` scheduler.
+6. **Checkpointing**:
+   - `epoch-last.pth` every epoch.
+   - `epoch-<N>.pth` every `epoch_save`.
+   - `epoch-best.pth` on best validation PSNR.
+
+### Validation chain (step-by-step)
+
+1. Uses `valid-paired-dataset` (fixed JPEG quality) with the same wrapper.
+2. Computes PSNR with `utils_.calc_psnr` on normalized tensors.
+3. Writes metrics to Tensorboard under `psnr/valid`.
+
+### Evaluation/testing chain (step-by-step)
+
+`test.py` is a standalone evaluation script designed for benchmark datasets.
+
+1. **Dataset selection**: `setname` chooses dataset and hard-coded path.
+2. **Image conditioning**:
+   - Pads input via symmetric flips to a fixed size (`size = 112*10`).
+   - Writes a temporary JPEG (`./bin/temp_.jpg`) with quality `q`.
+3. **DCT extraction**:
+   - Reads DCT coefficients and quantization tables from the temp JPEG.
+   - Dequantizes, clamps, and normalizes to `[-1, 1]`.
+4. **Inference**:
+   - Runs model, shifts output by `+0.5`, and crops to original size.
+5. **Metrics + outputs**:
+   - Calculates PSNR/PSNRB/SSIM vs. GT.
+   - Saves predicted PNGs if `save=True`.
+
+### Invariants & assumptions (critical for correctness)
+
+- **Block alignment**: `inp_size` is in DCT block units (8x8), so images must be large enough for the sampled crop to be valid.
+- **Range conventions**:
+  - DCT coefficients are clamped to `[-1024, 1016]` and normalized to `[-1, 1]`.
+  - GT RGB patches are in `[0, 1]` then shifted to `[-0.5, 0.5]`.
+- **Data pairing**: JPEGs at all qualities must align with GT PNG filenames.
+- **Path conventions**: `test.py` concatenates paths with `data_path + item`, so `data_path` must include a trailing `/`.
+
+---
+
 ## Configuration Reference
 
 The training config (`configs/train_JDEC.yaml`) drives the full pipeline.
@@ -337,6 +416,46 @@ You can replace either spec with a registered model as long as input/output shap
 
 ---
 
+## How-to Recipes
+
+### Train on a new dataset (minimal steps)
+
+1. Prepare paired data with the `train_paired/train_<quality>` and `train/` layout.  
+2. Build and install `dct_manip`.
+3. Update `configs/train_JDEC.yaml`:
+   - `train_dataset.dataset.args.root_path_inp`
+   - `train_dataset.dataset.args.root_path_gt`
+   - `val_dataset` paths and `inp_size`
+4. Launch training:
+   ```bash
+   python train.py --config configs/train_JDEC.yaml --gpu 0
+   ```
+
+### Evaluate a checkpoint on a benchmark
+
+1. Edit `test.py`:
+   - `setname = 'LIVE1'` (or `BSDS500`, `ICB`)
+   - `data_path = './PATH_TO_LIVE1/'` (**must end with `/`**)
+   - `model_path = './save/<run>/epoch-best.pth'`
+2. Run:
+   ```bash
+   python test.py
+   ```
+
+### Change patch size / memory footprint
+
+- **Increase speed / reduce memory**: lower `train_dataset.batch_size` or `wrapper.args.inp_size`.
+- **Stability**: ensure `inp_size` does not exceed the valid DCT crop area, or random cropping can fail.
+
+### Enable/disable caching
+
+Set `cache` in dataset args:
+- `none`: load from disk every time.
+- `bin`: precompute `.pkl` caches (recommended for large datasets).
+- `in_memory`: fastest but memory-heavy.
+
+---
+
 ## FAQ / Troubleshooting
 
 **Q: “Model name `jdec` not found in registry.”**
@@ -350,6 +469,51 @@ You can replace either spec with a registered model as long as input/output shap
 
 **Q: “Validation PSNR is NaN/inf.”**
 - Verify input normalization in the wrapper and check for invalid coefficients (e.g., corrupted JPEGs).
+
+**Q: “Training finishes but tensorboard iterations look wrong.”**
+- `train.py` and validation use hard-coded dataset sizes for the iteration counters (used only for tensorboard x-axis). If your dataset is not size 3450 (train) or 10 (val), the iteration index will be off. This does **not** affect training, but plots may look compressed or stretched.
+
+**Q: “`test.py` can’t find images or errors with paths.”**
+- `data_path` is concatenated with filenames (no `os.path.join`), so it **must end with a `/`**.
+
+**Q: “`test.py` selects the wrong dataset path.”**
+- The script uses `is` for string comparison in dataset selection; change it to `==` if you modify the script and see unexpected behavior.
+
+**Q: “Cropping fails with a negative range error.”**
+- Ensure training images are large enough for the chosen `inp_size` and that the image dimensions are multiples of 16 (because DCT blocks are 8x8 and chroma is subsampled).
+
+**Q: “Metrics don’t match the paper.”**
+- The validation loop computes PSNR on **normalized tensors** rather than on 8-bit RGB. For reproducibility vs. paper numbers, export predicted RGB to uint8 and re-evaluate externally.
+
+---
+
+## Known Limitations & Inconsistencies
+
+- **Hard-coded dataset sizes** in training/validation for iteration counts (tensorboard only).  
+- **`test.py` path concatenation** relies on a trailing slash.  
+- **`test.py` string identity checks** (`is`) can be brittle.  
+- **Single-quality evaluation**: `test.py` defaults to `q=30` only.  
+- **Temporary JPEG file**: evaluation rewrites `./bin/temp_.jpg` for each image.
+
+---
+
+## Potential Next Steps
+
+1. **Reproducibility upgrades**
+   - Add deterministic seeding and explicit RNG controls.
+   - Log DCT normalization ranges and quant tables per batch.
+2. **Evaluation improvements**
+   - Replace temporary JPEG file with in-memory encoding.
+   - Add multi-quality evaluation and aggregate curves (PSNR vs. quality).
+3. **Model/algorithm extensions**
+   - Add uncertainty-aware decoding for ambiguous high-frequency coefficients.
+   - Explore perceptual losses (LPIPS, DISTS) alongside L1.
+4. **Engineering & scalability**
+   - Replace hard-coded dataset sizes with `len(loader.dataset)`.
+   - Add config-driven evaluation to eliminate code edits.
+5. **Dataset robustness**
+   - Expand paired datasets with diverse cameras and chroma subsampling modes.
+   - Validate behavior under non-4:2:0 JPEGs.
 
 ---
 

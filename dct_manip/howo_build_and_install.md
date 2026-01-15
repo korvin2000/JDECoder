@@ -188,3 +188,99 @@ If `dct_manip` fails to build, dataset loading will fail before training starts.
 - Linking is explicit via `extra_objects` (libjpeg), so the path must be correct.
 
 If you want to customize the build (e.g., different libjpeg install prefix), update `setup.py` accordingly, then rebuild.
+
+
+
+Invariants for a successful build:
+
+1. `jpeglib.h` and `libjpeg.so` must match (same version family).
+2. The include/library paths in `setup.py` must point to the environment where those files live.
+3. The Python used to run `pip install .` must match the Python where PyTorch is installed.
+
+If any of these invariants break, the build fails (most common: “cannot find jpeglib.h” or undefined libjpeg symbols at link time).
+
+---
+
+## Prerequisites (Arch Linux)
+
+Install a build toolchain, Python dev headers, and libjpeg:
+
+```bash
+sudo pacman -S --needed base-devel python python-pip python-virtualenv \
+  python-setuptools python-wheel cmake ninja git libjpeg-turbo
+```
+
+Notes:
+- `base-devel` provides `gcc`, `g++`, `make`, and related tools.
+- `libjpeg-turbo` is ABI-compatible with libjpeg and provides `jpeglib.h` + `libjpeg.so`.
+
+### Optional: use Conda or venv
+
+If you use conda/venv, install **PyTorch** in that environment *before* building the extension. The extension build uses the **active Python** and that Python must be the one with PyTorch installed.
+
+---
+
+## Step-by-step build (Arch Linux)
+
+### 1) Create and activate a Python environment
+
+Pick one:
+
+**Option A: venv (lightweight)**
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip setuptools wheel
+```
+
+**Option B: conda**
+```bash
+conda env create --file environment.yaml
+conda activate jdec
+```
+
+### 2) Install PyTorch
+
+Use the PyTorch version that matches your CUDA setup. For CPU-only builds, install the CPU wheel.
+
+Example (CUDA 11.8 on Arch):
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+```
+
+### 3) Locate libjpeg headers/libs
+
+On Arch with `libjpeg-turbo`, the defaults are typically:
+- Headers: `/usr/include` (contains `jpeglib.h`)
+- Library: `/usr/lib/libjpeg.so`
+
+Confirm:
+```bash
+ls /usr/include/jpeglib.h
+ls /usr/lib/libjpeg.so
+```
+
+### 4) Edit `dct_manip/setup.py`
+
+You **must** set the correct include/lib paths for your environment. Update:
+
+- `include_dirs`: folder containing `jpeglib.h`
+- `library_dirs`: folder containing `libjpeg.so`
+- `extra_objects`: full path to `libjpeg.so`
+- `headers`: full path to `jpeglib.h`
+
+Example for Arch system install:
+```python
+include_dirs=['/usr/include']
+library_dirs=['/usr/lib']
+extra_objects=['/usr/lib/libjpeg.so']
+headers=['/usr/include/jpeglib.h']
+```
+
+Example for conda (replace `$CONDA_PREFIX`):
+```python
+include_dirs=['/path/to/conda/env/include']
+library_dirs=['/path/to/conda/env/lib']
+extra_objects=['/path/to/conda/env/lib/libjpeg.so']
+headers=['/path/to/conda/env/include/jpeglib.h']
+```

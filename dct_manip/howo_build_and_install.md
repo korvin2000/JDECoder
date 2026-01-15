@@ -36,7 +36,25 @@ sudo pacman -S --needed base-devel python python-pip python-setuptools python-wh
 ```
 
 - `base-devel` → compiler, make, etc.
-- `libjpeg-turbo` → provides `jpeglib.h` and `libjpeg.so` on Arch.
+- `libjpeg-turbo` → provides `jpeglib.h` and `libjpeg.so` on Arch (fast, drop-in replacement).
+
+**Alternative (AUR):** libjpeg9 (libjpeg v9)
+
+If you cannot use `libjpeg-turbo`, you can install **libjpeg9** from AUR:
+
+```bash
+git clone https://aur.archlinux.org/libjpeg9.git
+cd libjpeg9
+makepkg -si
+```
+
+Reference links:
+- Package: https://aur.archlinux.org/packages/libjpeg9
+- PKGBUILD: https://aur.archlinux.org/cgit/aur.git/tree/PKGBUILD?h=libjpeg9
+- Snapshot: https://aur.archlinux.org/cgit/aur.git/snapshot/libjpeg9.tar.gz
+
+This installs libjpeg v9 headers and `libjpeg.so.9`. You can link against it by pointing
+`setup.py` to the correct include/lib paths (see sections 3–4).
 
 **PyTorch (CPU or CUDA):**
 
@@ -59,8 +77,11 @@ You must update `dct_manip/setup.py` with actual paths. For Arch, defaults are u
 To **verify paths**, run:
 
 ```bash
-# libjpeg paths
+# libjpeg paths (libjpeg-turbo)
 pacman -Ql libjpeg-turbo | rg 'jpeglib.h|libjpeg.so'
+
+# libjpeg9 paths (AUR)
+pacman -Ql libjpeg9 | rg 'jpeglib.h|libjpeg.so'
 
 # PyTorch include paths (same Python env you will use)
 python - <<'PY'
@@ -161,19 +182,36 @@ If `dct_manip` fails to build, dataset loading will fail before training starts.
 **Fix:**
 - Prefer **libjpeg-turbo** (Arch default) and rebuild the extension.
 - Ensure you are not mixing conda’s libjpeg with system libjpeg.
+- If you switch between `libjpeg-turbo` and `libjpeg9`, rebuild `dct_manip` so it links
+  against the selected library.
 
-### Q4) `fatal error: torch/extension.h` or `torch` not found
+### Q4) Are `libjpeg-turbo` and `libjpeg9` interchangeable?
+**Short answer:** **Yes at build time, not necessarily at runtime.**
+
+Both provide the standard **libjpeg API** (`jpeglib.h`) and are typically ABI-compatible
+with applications that link to the installed `libjpeg.so` for that version family. In
+practice:
+
+- `libjpeg-turbo` is a **drop-in replacement** for libjpeg (v6b/7/8 ABI) and is the Arch
+  default; it is faster and commonly used.
+- `libjpeg9` provides libjpeg **v9** ABI (`libjpeg.so.9`). If you build `dct_manip`
+  against it, it will work, but you should not mix it with a different libjpeg at runtime.
+
+**Invariant:** the headers and shared library you compile against must match the runtime
+library used to load the extension.
+
+### Q5) `fatal error: torch/extension.h` or `torch` not found
 **Cause:** PyTorch not installed in the active Python environment.
 **Fix:**
 - Install PyTorch in the same environment and rebuild.
 
-### Q5) `C++17` or compiler errors
+### Q6) `C++17` or compiler errors
 **Cause:** old compiler or missing toolchain.
 **Fix:**
 - Install `base-devel` on Arch.
 - Ensure `g++ --version` is recent enough (GCC ≥ 9 is safe).
 
-### Q6) Build succeeds but import fails (`ModuleNotFoundError`)
+### Q7) Build succeeds but import fails (`ModuleNotFoundError`)
 **Cause:** Built under a different Python environment.
 **Fix:**
 - Activate the correct env before building.

@@ -29,7 +29,8 @@ elif setname is 'ICB':
     data_path = './PATH_TO_ICB'
 
 
-model_path = './data/model/jdec.pth'
+#model_path = './data/model/jdec.pth'
+model_path = './save/_train_JDEC/epoch-best.pth '
 
 model_spec = torch.load(model_path)['model']
 print("Available models:", models.keys())

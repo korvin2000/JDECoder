@@ -1,6 +1,6 @@
 train_dataset:
   dataset:
-    name: train-paired-imageset
+    name: train-paired-imageset-small
     args:
       root_path_inp: ./load/jpeg_removal/train_paired/train
       root_path_gt: ./load/jpeg_removal/train
@@ -16,8 +16,8 @@ val_dataset:
   dataset:
     name: valid-paired-dataset
     args:
-      root_path_inp: ./load/jpeg_removal/train_paired/valid_10
-      root_path_gt: ./load/jpeg_removal/valid
+      root_path_inp: ./load/jpeg_removal/valid_paired/valid_90
+      root_path_gt: ./load/jpeg_removal/valid_paired/valid
       repeat: 160
       cache: bin
       first_k: 10

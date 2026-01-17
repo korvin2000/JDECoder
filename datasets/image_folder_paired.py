@@ -146,6 +146,43 @@ class ImageFolderJPEG_embed_image(Dataset):
 
         elif self.cache == 'in_memory':
             return x
+
+@register('train-paired-imageset-small')
+class PairedImageFolders(Dataset):
+    def __init__(self, root_path_inp,root_path_gt, **kwargs):
+        self.root_path_inp = root_path_inp
+        self.inp_quality = [90]
+
+        self.dataset_jpeg90 = ImageFolderJPEG_embed_image(self.root_path_inp+ '_'+str(self.inp_quality[0]), **kwargs)#
+
+        self.dataset = ImageFolderPNG(root_path_gt, **kwargs)#100
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        inp_quality = random.choice([90])
+        if inp_quality == 10:
+            self.dataset_2 = self.dataset_jpeg10 
+        elif inp_quality == 20:
+            self.dataset_2 = self.dataset_jpeg20 
+        elif inp_quality == 30:
+            self.dataset_2 = self.dataset_jpeg30 
+        elif inp_quality == 40:
+            self.dataset_2 = self.dataset_jpeg40 
+        elif inp_quality == 50:
+            self.dataset_2 = self.dataset_jpeg50 
+        elif inp_quality == 60:
+            self.dataset_2 = self.dataset_jpeg60 
+        elif inp_quality == 70:
+            self.dataset_2 = self.dataset_jpeg70 
+        elif inp_quality == 80:
+            self.dataset_2 = self.dataset_jpeg80 
+        elif inp_quality == 90:
+            self.dataset_2 = self.dataset_jpeg90  
+        elif inp_quality == 100:
+            self.dataset_2 = self.dataset_jpeg100 
+        return self.dataset_2[idx], self.dataset[idx]
         
 
 @register('train-paired-imageset')

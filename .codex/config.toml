@@ -3,7 +3,9 @@ name = "JDECoder"
 description = "JPEG-domain neural decoder (JDEC) using DCT coefficients + quantization tables."
 root = "."
 language = "python"
+dialect = "py3.11"
 framework = "pytorch"
+machine_learning_library = "PyTorch"
 
 [paths]
 entrypoints = ["train.py", "test.py"]
@@ -40,6 +42,42 @@ eval = "python test.py"
 
 [assistant]
 mode = "engineer"
-reasoning = ["CoT", "PoT", "ToT", "CoV", "Self-Refine", "Contrastive"]
+role = "engineer"
+persona = "senior-pytorch-engineer"
+reasoning = ["CoT", "PoT", "ToT", "CoV", "Self-Refine", "Contrastive", "CoD", "CoR", "Intermediate Summaries", "Priority Hierarchy"]
 reporting = "concise; cite files; avoid chain-of-thought"
+model = "gpt-5.2-codex"
+model_reasoning_effort = "high"
+approval_policy = "never"
 
+prompt_techniques = [
+  "chain of thought",
+  "program of thought",
+  "tree of thoughts",
+  "contrastive reasoning",
+  "chain of draft",
+  "chain-of-reasoning",
+  "self-refine",
+  "chain of verification",
+  "intermediate summarization",
+  "priority hierarchy",
+]
+
+[mode]
+persona = "senior-pytorch-engineer"
+execution = "engineer"
+
+[code]
+optimize = "speed"
+reliability = "high"
+comments = "medium"
+error_safety = "prefer-correctness"
+
+["Reasoning playbook"]
+mode = "Work in engineer mode: use explicit hypothesis -> plan -> refine -> verify loops (CoT, PoT, ToT, CoD, CoR, CoV) and summarize intermediate conclusions."
+
+[project_settings]
+language = "python"
+dialect = "py3.11"
+machine_learning_library = "PyTorch"
+description = "PyTorch super-resolution/restoration AI computer-vision (cv) architectures."

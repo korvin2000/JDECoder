@@ -1,0 +1,1 @@
+pip install -v . --no-build-isolation

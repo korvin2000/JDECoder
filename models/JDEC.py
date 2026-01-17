@@ -8,8 +8,8 @@ from utils_ import make_coord
 
 import numpy as np 
 
-
-@register('IPEC-decoder_dctform-rgb-share-size4')
+@register('jdec')
+#@register('IPEC-decoder_dctform-rgb-share-size4')
 class JDEC(nn.Module):
     def __init__(self, encoder_spec,decoder_spec=None , hidden_dim=256):
         super().__init__()  

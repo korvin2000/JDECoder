@@ -7,13 +7,13 @@ setup(name='dct_manip',
       ext_modules=[cpp_extension.CppExtension(
 	      'dct_manip', 
 	      ['dct_manip.cpp'],
-		  include_dirs=['/home/cjss7894/miniconda3/envs/jdecc/include'],
-		  library_dirs=['/home/cjss7894/miniconda3/envs/jdecc/lib'],
+		  include_dirs=['/home/korvin/miniconda3/envs/jdec/include','/usr/include'],
+		  library_dirs=['/home/korvin/miniconda3/envs/jdec/lib','/usr/lib'],
 	      extra_objects=[
-			'/home/cjss7894/miniconda3/envs/jdecc/lib/libjpeg.so',
+			'/usr/lib/libjpeg.so',
 			],
 		  headers=[
-			'/home/cjss7894/miniconda3/envs/jdecc/include/jpeglib.h',],
+			'/usr/include/jpeglib.h',],
 	      extra_compile_args=['-std=c++17']
 	      ),
       ],

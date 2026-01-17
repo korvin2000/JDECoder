@@ -22,14 +22,14 @@ from models.models import models, make
 
 setname= 'LIVE1' #LIVE1 BSDS500 ICB 
 if setname is 'LIVE1':
-    data_path = './PATH_TO_LIVE1'
+    data_path = './data/images/'
 elif setname is 'BSDS500':
     data_path = './PATH_TO_B500'
 elif setname is 'ICB':
     data_path = './PATH_TO_ICB'
 
 
-model_path = './PATH_TO_MODEL'
+model_path = './data/model/jdec.pth'
 
 model_spec = torch.load(model_path)['model']
 print("Available models:", models.keys())

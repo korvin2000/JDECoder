@@ -1,19 +1,24 @@
 # Minimal runtime dependencies derived from code imports
+--extra-index-url https://download.pytorch.org/whl/cu118
 
 # Core ML stack
-torch==1.10.2
-torchvision==0.11.3
-numpy==1.19.2
-scipy==1.5.4
+#torch==2.0.1+cu118
+#torchvision==0.15.2+cu118
+torch==2.0.1+cu118
+torchvision==0.15.2+cu118
+setuptools==58.0.4
+pybind11
+numpy>=1.19.2,<2
+scipy>=1.5.4,<2
 timm==0.5.4
 einops==0.4.1
 
 # Data handling / IO
 opencv-python==4.5.5.64
-Pillow==8.4.0
-pandas==1.1.5
-jpegio==0.2.8
-dct-manip==0.2.3
+Pillow>=8.4.0,<9.6.0
+pandas>=1.1.5,<2
+jpegio>=0.2.8,<0.4.0
+dct-manip>=0.2.3,<0.3.0
 
 # Training utilities
 tqdm==4.63.0

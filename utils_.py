@@ -173,7 +173,7 @@ def quantization(image, low):
     return torch.floor((image * 255.)/(2 ** (8 - low)))/((2**low)-1) 
 
 def quantization16(image, low):
-    if low is 16:
+    if low == 16:
         return image
     else:
         return torch.floor((image * 65535.)/(2 ** (16 - low)))/((2**low)-1) 

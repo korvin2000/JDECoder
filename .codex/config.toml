@@ -1,0 +1,45 @@
+[project]
+name = "JDECoder"
+description = "JPEG-domain neural decoder (JDEC) using DCT coefficients + quantization tables."
+root = "."
+language = "python"
+framework = "pytorch"
+
+[paths]
+entrypoints = ["train.py", "test.py"]
+configs = ["configs/train_JDEC.yaml"]
+models = ["models/JDEC.py", "models/swinirv2.py", "models/mlp.py", "models/models.py"]
+datasets = ["datasets/image_folder_paired.py", "datasets/wrappers_jpeg.py", "datasets/datasets.py"]
+utils = ["utils_.py", "utils/"]
+
+[architecture]
+model_core = "JDEC (models/JDEC.py)"
+encoder_default = "swinv2_group_embedded (SwinV2 DCT encoder)"
+decoder_default = "mlp_1dconv (1x1 conv MLP)"
+registry_models = "models.models: register()/make()"
+registry_datasets = "datasets.datasets: register()/make()"
+
+[data]
+input_type = "JPEG DCT coefficients + quantization tables"
+normalization = "DCT clamp [-1024,1016] -> normalize to [-1,1]; GT RGB shift to [-0.5,0.5]"
+block_alignment = "Cropping in 8x8 DCT block units (wrapper)"
+
+[training]
+loss = "L1"
+optimizer_default = "Adam"
+lr_schedule = "MultiStepLR (milestones in configs/train_JDEC.yaml)"
+checkpoints = "./save/<config>/epoch-last.pth, epoch-<N>.pth, epoch-best.pth"
+
+[evaluation]
+metrics = ["PSNR", "PSNRB", "SSIM"]
+notes = "test.py writes ./bin/temp_.jpg and expects data_path with trailing slash"
+
+[commands]
+train = "python train.py --config configs/train_JDEC.yaml --gpu 0"
+eval = "python test.py"
+
+[assistant]
+mode = "engineer"
+reasoning = ["CoT", "PoT", "ToT", "CoV", "Self-Refine", "Contrastive"]
+reporting = "concise; cite files; avoid chain-of-thought"
+

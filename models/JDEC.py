@@ -55,6 +55,6 @@ class JDEC(nn.Module):
         return pred  
 
 
-    def forward(self, dctt,qmapp,cbcr):
-        pred = self.de_quantization(dctt,qmapp,cbcr)
+    def forward(self, dct, cbcr, qmap):
+        pred = self.de_quantization(dct, cbcr, qmap)
         return pred

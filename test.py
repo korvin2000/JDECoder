@@ -21,21 +21,22 @@ from models.models import models, make
 
 
 setname= 'LIVE1' #LIVE1 BSDS500 ICB 
-if setname is 'LIVE1':
+if setname == 'LIVE1':
     data_path = './data/images/'
-elif setname is 'BSDS500':
+elif setname == 'BSDS500':
     data_path = './PATH_TO_B500'
-elif setname is 'ICB':
+elif setname == 'ICB':
     data_path = './PATH_TO_ICB'
 
 
 #model_path = './data/model/jdec.pth'
-model_path = './save/_train_JDEC/epoch-best.pth '
+model_path = './save/_train_JDEC/epoch-best.pth'
 
 model_spec = torch.load(model_path)['model']
 print("Available models:", models.keys())
 model_spec['args']['encoder_spec']['name'] = 'swinv2_group_embedded'
 model = make(model_spec, load_sd=True).cuda()
+model.eval()
 
 batch_y = Rearrange('c (h s1) (w s2) ph pw -> (h w) c s1 s2 ph pw',s1 = 140, s2=140)
 batch_c = Rearrange('c (h s1) (w s2) ph pw -> (h w) c s1 s2 ph pw',s1 = 70, s2=70)
@@ -84,7 +85,7 @@ for i in [30]:
         dqt_swin = normalize(dqt_swin)
 
         with torch.no_grad():
-            pred = model(inp_swin.unsqueeze(0).cuda(),inp_swin_cbcr.unsqueeze(0).cuda(),
+            pred = model(inp_swin.unsqueeze(0).cuda(), inp_swin_cbcr.unsqueeze(0).cuda(),
             dqt_swin.unsqueeze(0).cuda())
             pred = pred.squeeze(0).detach().cpu() +0.5
         torch.cuda.empty_cache()

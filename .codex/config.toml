@@ -47,7 +47,8 @@ persona = "senior-pytorch-engineer"
 reasoning = ["CoT", "PoT", "ToT", "CoV", "Self-Refine", "Contrastive", "CoD", "CoR", "Intermediate Summaries", "Priority Hierarchy"]
 reporting = "concise; cite files; avoid chain-of-thought"
 model = "gpt-5.2-codex"
-model_reasoning_effort = "high"
+model_reasoning_effort = "xhigh"
+allowed_reasoning_effort = ["high", "xhigh"]
 approval_policy = "never"
 
 prompt_techniques = [
@@ -81,3 +82,14 @@ language = "python"
 dialect = "py3.11"
 machine_learning_library = "PyTorch"
 description = "PyTorch super-resolution/restoration AI computer-vision (cv) architectures."
+
+[model]
+name = "gpt-5.2-codex"
+reasoning_effort = "xhigh"
+allowed_reasoning_effort = ["high", "xhigh"]
+
+[instructions]
+items = [
+  "Always use model gpt-5.2-codex with reasoning effort high or xhigh; prefer xhigh for architecture or algorithm work or complex tasks.",
+  "Keep changes minimal; avoid refactors unless required by the task.",
+]
